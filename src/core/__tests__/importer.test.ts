@@ -38,8 +38,8 @@ describe("importer against the real CSV", () => {
     const c = report.anomalies.find((a) => a.code === "DUPLICATE_CONFLICT");
     expect(c).toBeTruthy();
     expect(c!.detail!.keptRow).toBe(25);
-    // only one Thalassa expense survives
-    const thal = report.expenses.filter((e) => /thalassa/i.test(e.description));
+    // only one Thalassa expense survives (the rest are suppressed)
+    const thal = report.expenses.filter((e) => /thalassa/i.test(e.description) && !e.suppressed);
     expect(thal.length).toBe(1);
     expect(thal[0].sourceRow).toBe(25);
   });

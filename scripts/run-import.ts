@@ -63,7 +63,7 @@ out(`## Imported expenses (final, after dedupe / FX / membership)`);
 out();
 out(`| Row | Date | Description | Paid by | Amount | Split | Participants |`);
 out(`| --- | --- | --- | --- | --- | --- | --- |`);
-for (const e of report.expenses) {
+for (const e of report.expenses.filter((x) => !x.suppressed)) {
   const fx = e.originalCurrency !== "INR" ? ` (${e.originalCurrency} ${(e.originalAmountPaise / 100).toFixed(2)})` : "";
   out(`| ${e.sourceRow} | ${e.date} | ${e.description} | ${e.paidBy} | ${formatPaise(e.amountPaise)}${fx} | ${e.splitType} | ${Object.keys(e.shares).join(", ")} |`);
 }

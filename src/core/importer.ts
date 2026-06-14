@@ -42,6 +42,10 @@ export interface NormalizedExpense {
   splitType: SplitType;
   notes: string | null;
   shares: Record<string, Paise>; // sums to amountPaise
+  // Set when cross-row dedupe drops this copy. It is still persisted (so Meera
+  // can "reject" the dedupe and bring it back) but excluded from balances.
+  suppressed: boolean;
+  suppressedReason: string | null;
 }
 
 export interface NormalizedSettlement {
@@ -356,6 +360,8 @@ export function importCsv(text: string, ctx: ImportContext): ImportReport {
       splitType,
       notes: notesRaw.trim() || null,
       shares: split.shares,
+      suppressed: false,
+      suppressedReason: null,
     });
   }
 
@@ -366,12 +372,14 @@ export function importCsv(text: string, ctx: ImportContext): ImportReport {
   return {
     filename: ctx.filename,
     totalRows: dataRows.length,
-    expenses: expenses.filter((e) => !(e as ExpenseWithFlag)._suppressed),
+    // All candidate expenses, including suppressed duplicates (flagged). Balances
+    // and persistence exclude suppressed ones; the report keeps them visible.
+    expenses,
     settlements,
     skipped,
     anomalies,
     summary: {
-      expenses: expenses.filter((e) => !(e as ExpenseWithFlag)._suppressed).length,
+      expenses: expenses.filter((e) => !e.suppressed).length,
       settlements: settlements.length,
       skipped: skipped.length,
       anomalies: anomalies.length,
@@ -380,16 +388,14 @@ export function importCsv(text: string, ctx: ImportContext): ImportReport {
   };
 }
 
-type ExpenseWithFlag = NormalizedExpense & { _suppressed?: boolean };
-
 /**
  * Group expenses by (date + participant set + normalised description). A group
  * with more than one row is a duplicate. If the amounts AND payer match it's an
  * exact dupe (drop the later copy); otherwise it's a conflict (keep the later
  * row as the correction, drop the earlier, and flag both for approval).
  */
-function detectDuplicates(expenses: ExpenseWithFlag[], anomalies: AnomalyRecord[]) {
-  const groups = new Map<string, ExpenseWithFlag[]>();
+function detectDuplicates(expenses: NormalizedExpense[], anomalies: AnomalyRecord[]) {
+  const groups = new Map<string, NormalizedExpense[]>();
   for (const e of expenses) {
     const participantKey = Object.keys(e.shares).sort().join(",");
     const key = `${e.date}|${participantKey}|${descKey(e.description)}`;
@@ -407,7 +413,8 @@ function detectDuplicates(expenses: ExpenseWithFlag[], anomalies: AnomalyRecord[
     if (amountsEqual && payersEqual) {
       // exact duplicate: keep the first, suppress the rest
       for (let i = 1; i < g.length; i++) {
-        g[i]._suppressed = true;
+        g[i].suppressed = true;
+        g[i].suppressedReason = `exact duplicate of row ${g[0].sourceRow}`;
         anomalies.push(
           mk(g[i].sourceRow, "DUPLICATE_EXACT", "warning",
             `"${g[i].description}" duplicates row ${g[0].sourceRow} (same date, payer, amount). Kept row ${g[0].sourceRow}, dropped this one.`,
@@ -420,7 +427,8 @@ function detectDuplicates(expenses: ExpenseWithFlag[], anomalies: AnomalyRecord[
       const keep = g[g.length - 1];
       for (const e of g) {
         if (e === keep) continue;
-        e._suppressed = true;
+        e.suppressed = true;
+        e.suppressedReason = `conflicting duplicate of row ${keep.sourceRow}`;
         anomalies.push(
           mk(e.sourceRow, "DUPLICATE_CONFLICT", "warning",
             `"${e.description}" (${e.paidBy}, ${(e.amountPaise / 100).toFixed(2)}) appears to duplicate row ${keep.sourceRow} (${keep.paidBy}, ${(keep.amountPaise / 100).toFixed(2)}) with different values. Kept the later row ${keep.sourceRow}; dropped this one.`,

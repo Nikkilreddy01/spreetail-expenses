@@ -89,12 +89,18 @@ model Expense {
   splitType   String   // equal | unequal | percentage | share
   notes       String?
 
+  // A suppressed expense is a de-duplicated copy: kept for the audit trail and
+  // so Meera can "reject" the dedupe to bring it back, but excluded from balances.
+  suppressed       Boolean @default(false)
+  suppressedReason String?
+
   // Provenance: which CSV row produced this, and which import batch.
   importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])
   importBatchId String?
   sourceRow     Int?
 
-  splits ExpenseSplit[]
+  splits     ExpenseSplit[]
+  anomalies  Anomaly[]
 
   @@index([groupId, date])
 }
@@ -164,4 +170,9 @@ model Anomaly {
   reviewStatus  String  @default("auto")
   // JSON blob with before/after detail for the UI to render.
   detail        String?
+
+  // Optional link to the expense this anomaly acts on (e.g. a suppressed dup),
+  // so approve/reject can flip that expense's suppressed flag.
+  expense   Expense? @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+  expenseId String?
 }
