@@ -22,3 +22,6 @@ prisma/*.db-journal
 
 # vitest / coverage
 coverage/
+
+# next.js generated types
+next-env.d.ts
