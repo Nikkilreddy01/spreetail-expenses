@@ -2,26 +2,27 @@
 
 The app is a standard Next.js server with a SQLite database. Two supported paths.
 
-## Option A — Render / Railway / Fly (SQLite on a persistent disk)
-
-This keeps SQLite. The only requirement is that the database file lives on a
-**persistent volume** (the default ephemeral filesystem is wiped on each deploy).
+## Option A — Render free tier (SQLite, re-seeded on boot)
 
 `render.yaml` in the repo describes this. Steps:
 
 1. Push this repo to GitHub.
 2. On [render.com](https://render.com) → **New → Blueprint**, point it at the repo.
    Render reads `render.yaml`:
-   - build: `npm install && npm run build`
+   - build: `npm install --include=dev && npm run build`
    - start: `npm run db:push && npm run seed && npm start`
-   - a 1 GB disk mounted at `/data`, with `DATABASE_URL=file:/data/prod.db`
-3. Set `AUTH_SECRET` to a random string in the Render dashboard.
-4. First deploy runs `db:push` (creates tables) and `seed` (imports the CSV →
-   creates the "Flat 4B" group and logins). Remove `&& npm run seed` from the
-   start command after the first successful deploy so it doesn't reset data.
+   - `DATABASE_URL=file:/tmp/prod.db`, `AUTH_SECRET` auto-generated
+3. Click **Apply**. The build + first boot create tables and seed the CSV →
+   the "Flat 4B" group, member logins, imported expenses, and anomalies.
 
-> Why a disk: serverless filesystems are read-only/ephemeral, so a bare SQLite
-> file would reset every cold start. The disk makes it durable.
+> Free tier has no persistent disk, so SQLite lives in ephemeral `/tmp`. The
+> start command re-seeds on every boot, so data is durable while the service is
+> warm (covers a live demo) and rebuilds the exact seeded state after a cold
+> restart. For data that survives restarts, use a paid plan + disk, or Option B.
+
+> `--include=dev`: Render sets `NODE_ENV=production`, under which `npm install`
+> skips devDependencies — but `prisma`, `typescript`, and `tsx` are needed to
+> build and seed, so the flag forces them in.
 
 ## Option B — Vercel + Postgres (swap the provider)
 

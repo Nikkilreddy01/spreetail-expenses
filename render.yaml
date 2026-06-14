@@ -1,5 +1,12 @@
-# Render Blueprint: deploy the Next.js app with SQLite on a persistent disk.
+# Render Blueprint: deploy the Next.js app with SQLite (free tier).
 # Docs: https://render.com/docs/blueprint-spec
+#
+# Free tier has no persistent disk, so the SQLite file lives in ephemeral
+# storage (/tmp) and the start command re-seeds it from the CSV on every boot.
+# Effect: data is durable while the service is warm (covers a live session);
+# a cold restart rebuilds the exact seeded state (group, members, imported
+# expenses, anomalies). To make data survive restarts, switch to a paid plan
+# and add a disk, or use Postgres (see DEPLOY.md Option B).
 services:
   - type: web
     name: flat-expenses
@@ -8,17 +15,12 @@ services:
     # --include=dev: NODE_ENV=production (set below) makes npm skip devDeps,
     # but prisma/typescript/tsx are needed to build and seed. Force them in.
     buildCommand: npm install --include=dev && npm run build
-    # First deploy: create tables + seed the CSV. After the first successful
-    # deploy, drop "&& npm run seed" so restarts don't reset the data.
+    # Re-create tables + seed the CSV on every boot (ephemeral storage).
     startCommand: npm run db:push && npm run seed && npm start
     envVars:
       - key: DATABASE_URL
-        value: file:/data/prod.db
+        value: file:/tmp/prod.db
       - key: AUTH_SECRET
         generateValue: true
       - key: NODE_ENV
         value: production
-    disk:
-      name: data
-      mountPath: /data
-      sizeGB: 1
