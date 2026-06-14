@@ -1,0 +1,22 @@
+# Render Blueprint: deploy the Next.js app with SQLite on a persistent disk.
+# Docs: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: flat-expenses
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    # First deploy: create tables + seed the CSV. After the first successful
+    # deploy, drop "&& npm run seed" so restarts don't reset the data.
+    startCommand: npm run db:push && npm run seed && npm start
+    envVars:
+      - key: DATABASE_URL
+        value: file:/data/prod.db
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: NODE_ENV
+        value: production
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
