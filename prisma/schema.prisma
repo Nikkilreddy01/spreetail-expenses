@@ -1,0 +1,167 @@
+// Relational schema for the flat-share expenses app.
+//
+// Design notes (defended in DECISIONS.md):
+// - All money is stored as INTEGER PAISE (1 rupee = 100 paise). We never store
+//   floats for money, so rounding is explicit and reproducible.
+// - Membership is its own table with joinedAt / leftAt so a group's roster can
+//   change over time (Meera leaves end of March, Sam joins mid-April). Balances
+//   are computed against the membership window, never the current roster.
+// - An Expense has many ExpenseSplit rows (one per participant) holding the
+//   exact paise that participant owes. The split engine computes these once at
+//   import/create time so balances are a pure sum, not a re-derivation.
+// - Settlements are first-class and separate from expenses (the CSV logged one
+//   as an expense; we reclassify it).
+// - ImportBatch + Anomaly capture the import report so it is queryable and so
+//   Meera can approve/reject each change.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  // Canonical display name, e.g. "Priya". Name variants in the CSV
+  // ("priya", "Priya S", "Priya  ") all normalise to this user.
+  name      String   @unique
+  email     String?  @unique
+  password  String? // plaintext-free: stored as a salted hash (see lib/auth)
+  createdAt DateTime @default(now())
+
+  memberships   Membership[]
+  paidExpenses  Expense[]     @relation("PaidBy")
+  splits        ExpenseSplit[]
+  paymentsMade  Settlement[]  @relation("Payer")
+  paymentsRecvd Settlement[]  @relation("Payee")
+}
+
+model Group {
+  id        String   @id @default(cuid())
+  name      String
+  // Base currency every balance is reported in. The flat operates in INR;
+  // USD trip expenses are converted on import.
+  baseCurrency String @default("INR")
+  createdAt DateTime @default(now())
+
+  memberships Membership[]
+  expenses    Expense[]
+  settlements Settlement[]
+  imports     ImportBatch[]
+}
+
+model Membership {
+  id       String    @id @default(cuid())
+  group    Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId  String
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId   String
+  // The window during which this person is liable for shared expenses.
+  // leftAt = null means still a member. An expense dated outside [joinedAt, leftAt]
+  // must not create a split for this person.
+  joinedAt DateTime
+  leftAt   DateTime?
+  // "member" (permanent flatmate) vs "guest" (Dev, who joins for the trip only).
+  role     String    @default("member")
+
+  @@unique([groupId, userId])
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId     String
+  date        DateTime
+  description String
+  // Who actually paid, in full, up front.
+  paidBy      User     @relation("PaidBy", fields: [paidById], references: [id])
+  paidById    String
+  // Amount the group owes, in PAISE of the group's base currency (INR),
+  // AFTER any currency conversion. originalAmount/originalCurrency keep the
+  // pre-conversion figure for the audit trail (Priya's dollar question).
+  amountPaise        Int
+  originalAmountPaise Int
+  originalCurrency    String
+  fxRate              Float? // INR per 1 unit of originalCurrency, null if base
+  splitType   String   // equal | unequal | percentage | share
+  notes       String?
+
+  // Provenance: which CSV row produced this, and which import batch.
+  importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])
+  importBatchId String?
+  sourceRow     Int?
+
+  splits ExpenseSplit[]
+
+  @@index([groupId, date])
+}
+
+model ExpenseSplit {
+  id        String  @id @default(cuid())
+  expense   Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  expenseId String
+  user      User    @relation(fields: [userId], references: [id])
+  userId    String
+  // The exact paise this user owes for this expense. Sum of all sharePaise
+  // for an expense equals expense.amountPaise (enforced by the split engine).
+  sharePaise Int
+
+  @@unique([expenseId, userId])
+}
+
+model Settlement {
+  id      String   @id @default(cuid())
+  group   Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId String
+  date    DateTime
+  // payer hands money to payee, reducing what payer owes payee.
+  payer   User     @relation("Payer", fields: [payerId], references: [id])
+  payerId String
+  payee   User     @relation("Payee", fields: [payeeId], references: [id])
+  payeeId String
+  amountPaise Int
+  note    String?
+
+  // Provenance if this settlement came from a reclassified CSV row.
+  importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])
+  importBatchId String?
+  sourceRow     Int?
+}
+
+model ImportBatch {
+  id          String   @id @default(cuid())
+  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId     String
+  filename    String
+  createdAt   DateTime @default(now())
+  totalRows   Int
+  importedExpenses   Int @default(0)
+  importedSettlements Int @default(0)
+  skippedRows        Int @default(0)
+
+  anomalies   Anomaly[]
+  expenses    Expense[]
+  settlements Settlement[]
+}
+
+model Anomaly {
+  id            String  @id @default(cuid())
+  importBatch   ImportBatch @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
+  importBatchId String
+  // The CSV line number (1-based, header = line 1) this anomaly was found on.
+  sourceRow     Int?
+  // Machine code, e.g. "DUPLICATE_CONFLICT", "CURRENCY_AS_INR".
+  code          String
+  severity      String  // info | warning | error
+  message       String
+  // What the importer did: "imported" | "converted" | "reclassified" |
+  // "skipped" | "merged" | "normalized" | "needs_review".
+  action        String
+  // For changes Meera must approve: pending | approved | rejected | auto.
+  reviewStatus  String  @default("auto")
+  // JSON blob with before/after detail for the UI to render.
+  detail        String?
+}
