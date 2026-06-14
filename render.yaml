@@ -9,7 +9,7 @@
 # and add a disk, or use Postgres (see DEPLOY.md Option B).
 services:
   - type: web
-    name: flat-expenses
+    name: settlr
     runtime: node
     plan: free
     # --include=dev: NODE_ENV=production (set below) makes npm skip devDeps,

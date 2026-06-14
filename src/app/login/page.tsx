@@ -15,7 +15,7 @@ export default async function LoginPage() {
     <div className="center-screen">
       <div className="card login-card">
         <div className="brand" style={{ fontWeight: 700, fontSize: 20, marginBottom: 2 }}>
-          Flat 4B <span style={{ color: "var(--accent)" }}>Expenses</span>
+          Sett<span style={{ color: "var(--accent)" }}>lr</span>
         </div>
         <p className="sub small">Sign in to see balances and import the spreadsheet.</p>
         <LoginForm />

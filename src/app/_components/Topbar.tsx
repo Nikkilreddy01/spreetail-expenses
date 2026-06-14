@@ -5,7 +5,7 @@ export function Topbar({ userName }: { userName?: string }) {
   return (
     <div className="topbar">
       <Link href="/groups" className="brand">
-        Flat <span>Expenses</span>
+        Sett<span>lr</span>
       </Link>
       <div className="row">
         {userName ? <span className="muted small">{userName}</span> : null}

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Flat 4B — Shared Expenses",
+  title: "Settlr — Shared Expenses for Flat 4B",
   description: "Shared expenses with a deliberately messy CSV import",
 };
 

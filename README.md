@@ -1,4 +1,4 @@
-# Flat 4B — Shared Expenses App
+# Settlr — Shared Expenses for Flat 4B
 
 A shared-expenses app for a flat whose history lives in a deliberately messy
 spreadsheet. The app imports that spreadsheet (`expenses_export.csv`) **exactly
