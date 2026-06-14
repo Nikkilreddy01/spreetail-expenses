@@ -115,6 +115,16 @@ duplicates. The output is a structured `ImportReport`; `persistImport` writes it
 to the DB in one transaction. The same function backs both the CLI report and the
 web upload, so they can never disagree.
 
+## AI used
+
+This project was built with **Claude (Anthropic) via Claude Code** as the primary
+collaborator — used for scaffolding, the importer/split/balance logic, tests, and
+the docs. The AI was treated as a fast but fallible pair: every output was reviewed,
+and several of its first answers were wrong (asymmetric rounding on refunds, a
+missed settlement row, a split that broke the sum invariant, a bad dedupe key, an
+off-by-one on Meera's departure). Each is documented — with how it was caught and
+what changed — in **[AI_USAGE.md](AI_USAGE.md)**, along with the key prompts.
+
 ## Deployment
 
 See **[DEPLOY.md](DEPLOY.md)**. The app is a standard Next.js server; it deploys
